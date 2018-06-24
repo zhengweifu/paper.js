@@ -107,7 +107,6 @@ var View = Base.extend(Emitter, /** @lends View# */{
         // Link this id to our view
         View._viewsById[this._id] = this;
         (this._matrix = new Matrix())._owner = this;
-        this._zoom = 1;
         // Make sure the first view is focused for keyboard input straight away
         if (!View._focused)
             View._focused = this;
@@ -331,7 +330,7 @@ var View = Base.extend(Emitter, /** @lends View# */{
         // one thing:
         this._project._changed(/*#=*/Change.VIEW);
         // Force recalculation of these values next time they are requested.
-        this._bounds = null;
+        this._bounds = this._decomposed = undefined;
     },
 
     /**
@@ -383,21 +382,19 @@ var View = Base.extend(Emitter, /** @lends View# */{
 
     setViewSize: function(/* size */) {
         var size = Size.read(arguments),
-            width = size.width,
-            height = size.height,
             delta = size.subtract(this._viewSize);
         if (delta.isZero())
             return;
-        this._setElementSize(width, height);
-        this._viewSize.set(width, height);
-        // Call onResize handler on any size change
-        this.emit('resize', {
-            size: size,
-            delta: delta
-        });
+        this._setElementSize(size.width, size.height);
+        this._viewSize.set(size);
         this._changed();
-        if (this._autoUpdate)
-            this.requestUpdate();
+        // Emit resize event on any size changes.
+        this.emit('resize', { size: size, delta: delta });
+        if (this._autoUpdate) {
+            // Update right away, don't wait for the next animation frame as
+            // otherwise the view would flicker during resizes, see #1126
+            this.update();
+        }
     },
 
     /**
@@ -434,56 +431,6 @@ var View = Base.extend(Emitter, /** @lends View# */{
      */
     getSize: function() {
         return this.getBounds().getSize();
-    },
-
-    /**
-     * The center of the visible area in project coordinates.
-     *
-     * @bean
-     * @type Point
-     */
-    getCenter: function() {
-        return this.getBounds().getCenter();
-    },
-
-    setCenter: function(/* center */) {
-        var center = Point.read(arguments);
-        this.translate(this.getCenter().subtract(center));
-    },
-
-    /**
-     * The zoom factor by which the project coordinates are magnified.
-     *
-     * @bean
-     * @type Number
-     */
-    getZoom: function() {
-        return this._zoom;
-    },
-
-    setZoom: function(zoom) {
-        this.transform(new Matrix().scale(zoom / this._zoom,
-            this.getCenter()));
-        this._zoom = zoom;
-    },
-
-    /**
-     * The view's transformation matrix, defining the view onto the project's
-     * contents (position, zoom level, rotation, etc).
-     *
-     * @bean
-     * @type Matrix
-     */
-    getMatrix: function() {
-        return this._matrix;
-    },
-
-    setMatrix: function() {
-        // Use Matrix#initialize to easily copy over values.
-        // NOTE: calling initialize() also calls #_changed() for us, through its
-        // call to #set() / #reset(), and this also handles _applyMatrix for us.
-        var matrix = this._matrix;
-        matrix.initialize.apply(matrix, arguments);
     },
 
     /**
@@ -539,6 +486,10 @@ var View = Base.extend(Emitter, /** @lends View# */{
                 center || this.getCenter(true)));
     };
 }, /** @lends View# */{
+    _decompose: function() {
+        return this._decomposed || (this._decomposed = this._matrix.decompose());
+    },
+
     /**
      * {@grouptitle Transform Functions}
      *
@@ -552,6 +503,104 @@ var View = Base.extend(Emitter, /** @lends View# */{
     },
 
     /**
+     * The center of the visible area in project coordinates.
+     *
+     * @bean
+     * @type Point
+     */
+    getCenter: function() {
+        return this.getBounds().getCenter();
+    },
+
+    setCenter: function(/* center */) {
+        var center = Point.read(arguments);
+        this.translate(this.getCenter().subtract(center));
+    },
+
+    /**
+     * The view's zoom factor by which the project coordinates are magnified.
+     *
+     * @bean
+     * @type Number
+     * @see #getScaling()
+     */
+    getZoom: function() {
+        var decomposed = this._decompose(),
+            scaling = decomposed && decomposed.scaling;
+        // Use average since it can be non-uniform, and return 0 when it can't
+        // be decomposed.
+        return scaling ? (scaling.x + scaling.y) / 2 : 0;
+    },
+
+    setZoom: function(zoom) {
+        this.transform(new Matrix().scale(zoom / this.getZoom(),
+            this.getCenter()));
+    },
+
+    /**
+     * The current rotation angle of the view, as described by its
+     * {@link #matrix}.
+     *
+     * @bean
+     * @type Number
+     */
+    getRotation: function() {
+        var decomposed = this._decompose();
+        return decomposed && decomposed.rotation;
+    },
+
+    setRotation: function(rotation) {
+        var current = this.getRotation();
+        if (current != null && rotation != null) {
+            this.rotate(rotation - current);
+        }
+    },
+
+    /**
+     * The current scale factor of the view, as described by its
+     * {@link #matrix}.
+     *
+     * @bean
+     * @type Point
+     * @see #getZoom()
+     */
+    getScaling: function() {
+        var decomposed = this._decompose(),
+            scaling = decomposed && decomposed.scaling;
+        return scaling
+                ? new LinkedPoint(scaling.x, scaling.y, this, 'setScaling')
+                : undefined;
+    },
+
+    setScaling: function(/* scaling */) {
+        var current = this.getScaling(),
+            // Clone existing points since we're caching internally.
+            scaling = Point.read(arguments, 0, { clone: true, readNull: true });
+        if (current && scaling) {
+            this.scale(scaling.x / current.x, scaling.y / current.y);
+        }
+    },
+
+    /**
+     * The view's transformation matrix, defining the view onto the project's
+     * contents (position, zoom level, rotation, etc).
+     *
+     * @bean
+     * @type Matrix
+     */
+    getMatrix: function() {
+        return this._matrix;
+    },
+
+    setMatrix: function() {
+        // Use Matrix#initialize to easily copy over values.
+        // NOTE: calling initialize() also calls #_changed() for us, through its
+        // call to #set() / #reset(), and this also handles _applyMatrix for us.
+        var matrix = this._matrix;
+        matrix.initialize.apply(matrix, arguments);
+    },
+
+    /**
      * Rotates the view by a given angle around the given center point.
      *
      * Angles are oriented clockwise and measured in degrees.
@@ -559,7 +608,7 @@ var View = Base.extend(Emitter, /** @lends View# */{
      * @name View#rotate
      * @function
      * @param {Number} angle the rotation angle
-     * @param {Point} [center={@link View#getCenter()}]
+     * @param {Point} [center={@link View#center}]
      * @see Matrix#rotate(angle[, center])
      */
 
@@ -570,7 +619,7 @@ var View = Base.extend(Emitter, /** @lends View# */{
      * @name View#scale
      * @function
      * @param {Number} scale the scale factor
-     * @param {Point} [center={@link View#getCenter()}]
+     * @param {Point} [center={@link View#center}]
      */
     /**
      * Scales the view by the given values from its center point, or optionally
@@ -580,7 +629,7 @@ var View = Base.extend(Emitter, /** @lends View# */{
      * @function
      * @param {Number} hor the horizontal scale factor
      * @param {Number} ver the vertical scale factor
-     * @param {Point} [center={@link View#getCenter()}]
+     * @param {Point} [center={@link View#center}]
      */
 
     /**
@@ -590,7 +639,7 @@ var View = Base.extend(Emitter, /** @lends View# */{
      * @name View#shear
      * @function
      * @param {Point} shear the horziontal and vertical shear factors as a point
-     * @param {Point} [center={@link View#getCenter()}]
+     * @param {Point} [center={@link View#center}]
      * @see Matrix#shear(shear[, center])
      */
     /**
@@ -601,7 +650,7 @@ var View = Base.extend(Emitter, /** @lends View# */{
      * @function
      * @param {Number} hor the horizontal shear factor
      * @param {Number} ver the vertical shear factor
-     * @param {Point} [center={@link View#getCenter()}]
+     * @param {Point} [center={@link View#center}]
      * @see Matrix#shear(hor, ver[, center])
      */
 
@@ -612,7 +661,7 @@ var View = Base.extend(Emitter, /** @lends View# */{
      * @name View#skew
      * @function
      * @param {Point} skew the horziontal and vertical skew angles in degrees
-     * @param {Point} [center={@link View#getCenter()}]
+     * @param {Point} [center={@link View#center}]
      * @see Matrix#shear(skew[, center])
      */
     /**
@@ -623,7 +672,7 @@ var View = Base.extend(Emitter, /** @lends View# */{
      * @function
      * @param {Number} hor the horizontal skew angle in degrees
      * @param {Number} ver the vertical sskew angle in degrees
-     * @param {Point} [center={@link View#getCenter()}]
+     * @param {Point} [center={@link View#center}]
      * @see Matrix#shear(hor, ver[, center])
      */
 
@@ -1152,12 +1201,23 @@ new function() { // Injection scope for event handling on the browser
         fallbacks = {
             doubleclick: 'click',
             mousedrag: 'mousemove'
-        };
+        },
+        // Various variables required by #_handleMouseEvent()
+        wasInView = false,
+        overView,
+        downPoint,
+        lastPoint,
+        downItem,
+        overItem,
+        dragItem,
+        clickItem,
+        clickTime,
+        dblClick;
 
     // Returns true if event was prevented, false otherwise.
-    function emitMouseEvent(obj, type, event, point, prevPoint, stopItem) {
-        var target = obj,
-            stopped = false,
+    function emitMouseEvent(obj, target, type, event, point, prevPoint,
+            stopItem) {
+        var stopped = false,
             mouseEvent;
 
         // Returns true if the event was stopped, false otherwise.
@@ -1166,7 +1226,8 @@ new function() { // Injection scope for event handling on the browser
                 // Only produce the event object if we really need it, and then
                 // reuse it if we're bubbling.
                 if (!mouseEvent) {
-                    mouseEvent = new MouseEvent(type, event, point, target,
+                    mouseEvent = new MouseEvent(type, event, point,
+                            target || obj,
                             // Calculate delta if prevPoint was passed
                             prevPoint ? point.subtract(prevPoint) : null);
                 }
@@ -1195,7 +1256,7 @@ new function() { // Injection scope for event handling on the browser
     }
 
     // Returns true if event was stopped, false otherwise.
-    function emitMouseEvents(view, item, type, event, point, prevPoint) {
+    function emitMouseEvents(view, hitItem, type, event, point, prevPoint) {
         // Before handling events, process removeOn() calls for cleanup.
         // NOTE: As soon as there is one event handler receiving mousedrag
         // events, non of the removeOnMove() items will be removed while the
@@ -1206,17 +1267,18 @@ new function() { // Injection scope for event handling on the browser
         // and of the handlers called event.preventDefault()
         prevented = called = false;
         // First handle the drag-item and its parents, through bubbling.
-        return (dragItem && emitMouseEvent(dragItem, type, event, point,
-                    prevPoint)
-            // Next handle the hit-test item, if it's different from the drag
-            // item and not a descendant of it (in which case it would already
-            // have received an event in the call above). Use fallbacks to
-            // translate mousedrag to mousemove, since drag is handled above.
-            || item && item !== dragItem && !item.isDescendant(dragItem)
-                && emitMouseEvent(item, fallbacks[type] || type, event, point,
-                    prevPoint, dragItem)
+        return (dragItem && emitMouseEvent(dragItem, null, type, event,
+                    point, prevPoint)
+            // Next handle the hit-item, if it's different from the drag-item
+            // and not a descendant of it (in which case it would already have
+            // received an event in the call above).
+            || hitItem && hitItem !== dragItem
+                && !hitItem.isDescendant(dragItem)
+                && emitMouseEvent(hitItem, null, type, event, point, prevPoint,
+                    dragItem)
             // Lastly handle the mouse events on the view, if we're still here.
-            || emitMouseEvent(view, type, event, point, prevPoint));
+            || emitMouseEvent(view, dragItem || hitItem || view, type, event,
+                    point, prevPoint));
     }
 
     /**
@@ -1245,20 +1307,6 @@ new function() { // Injection scope for event handling on the browser
         }
     };
 
-    /**
-     * Various variables required by #_handleMouseEvent()
-     */
-    var downPoint,
-        lastPoint,
-        downItem,
-        overItem,
-        dragItem,
-        clickItem,
-        clickTime,
-        dblClick,
-        overView,
-        wasInView = false;
-
     return {
         _viewEvents: viewEvents,
 
@@ -1272,6 +1320,7 @@ new function() { // Injection scope for event handling on the browser
                 // event requires an item hit-test or not, before changing type
                 // to the virtual value (e.g. mousemove -> mousedrag):
                 hitItems = itemEvents.native[type],
+                nativeMove = type === 'mousemove',
                 tool = this._scope.tool,
                 view = this;
 
@@ -1284,7 +1333,7 @@ new function() { // Injection scope for event handling on the browser
             // least one of the events responds to mousedrag, convert to it.
             // NOTE: emitMouseEvent(), as well as Tool#_handleMouseEvent() fall
             // back to mousemove if the objects don't respond to mousedrag.
-            if (type === 'mousemove' && dragging && responds('mousedrag'))
+            if (nativeMove && dragging && responds('mousedrag'))
                 type = 'mousedrag';
             if (!point)
                 point = this.getEventPoint(event);
@@ -1292,12 +1341,12 @@ new function() { // Injection scope for event handling on the browser
             // Run the hit-test on items first, but only if we're required to do
             // so for this given mouse event, see hitItems, #_countItemEvent():
             var inView = this.getBounds().contains(point),
-                hit = inView && hitItems && this._project.hitTest(point, {
+                hit = hitItems && inView && view._project.hitTest(point, {
                     tolerance: 0,
                     fill: true,
                     stroke: true
                 }),
-                item = hit && hit.item || undefined,
+                hitItem = hit && hit.item || null,
                 // Keep track if view event should be handled, so we can use it
                 // to decide if tool._handleMouseEvent() shall be called after.
                 handle = false,
@@ -1306,32 +1355,33 @@ new function() { // Injection scope for event handling on the browser
             // mouse event types.
             mouse[type.substr(5)] = true;
 
-            // Always first call the view's mouse handlers, as required by
-            // CanvasView, and then handle the active tool after, if any.
-            // Handle mousemove first, even if this is not actually a mousemove
-            // event but the mouse has moved since the last event, but do not
-            // allow it to stop the other events in that case.
-            var moveType = mouse.move || mouse.drag ? type : 'mousemove';
-            // Handle mouseenter / leave between items.
-            if (item !== overItem) {
-                if (overItem)
-                    emitMouseEvent(overItem, 'mouseleave', event, point);
-                if (item)
-                    emitMouseEvent(item, 'mouseenter', event, point);
+            // Handle mouseenter / leave between items and views first.
+            if (hitItems && hitItem !== overItem) {
+                if (overItem) {
+                    emitMouseEvent(overItem, null, 'mouseleave', event, point);
+                }
+                if (hitItem) {
+                    emitMouseEvent(hitItem, null, 'mouseenter', event, point);
+                }
+                overItem = hitItem;
             }
-            overItem = item;
             // Handle mouseenter / leave on the view.
             if (wasInView ^ inView) {
-                emitMouseEvent(this, inView ? 'mouseenter' : 'mouseleave',
+                emitMouseEvent(this, null, inView ? 'mouseenter' : 'mouseleave',
                         event, point);
                 overView = inView ? this : null;
                 handle = true; // To include the leaving move.
             }
-            // Now finally handle the mousemove / mousedrag event.
+            // Now handle the mousemove / mousedrag event.
+            // Always call the view's mouse handlers first, as required by
+            // CanvasView, and then handle the active tool after, if any.
             // mousedrag is allowed to leave the view and still triggers events,
             // but do not trigger two subsequent even with the same location.
             if ((inView || mouse.drag) && !point.equals(lastPoint)) {
-                emitMouseEvents(this, item, moveType, event, point, lastPoint);
+                // Handle mousemove even if this is not actually a mousemove
+                // event but the mouse has moved since the last event.
+                emitMouseEvents(this, hitItem, nativeMove ? type : 'mousemove',
+                        event, point, lastPoint);
                 handle = true;
             }
             wasInView = inView;
@@ -1339,25 +1389,32 @@ new function() { // Injection scope for event handling on the browser
             // We emit mousedown only when in the view, and mouseup regardless,
             // as long as the mousedown event was inside.
             if (mouse.down && inView || mouse.up && downPoint) {
-                emitMouseEvents(this, item, type, event, point, downPoint);
+                emitMouseEvents(this, hitItem, type, event, point, downPoint);
                 if (mouse.down) {
                     // See if we're clicking again on the same item, within the
                     // double-click time. Firefox uses 300ms as the max time
                     // difference:
-                    dblClick = item === clickItem
+                    dblClick = hitItem === clickItem
                         && (Date.now() - clickTime < 300);
-                    downItem = clickItem = item;
+                    downItem = clickItem = hitItem;
                     // Only start dragging if the mousedown event has not
-                    // prevented the default.
-                    dragItem = !prevented && item;
+                    // prevented the default, and if the hitItem or any of its
+                    // parents actually respond to mousedrag events.
+                    if (!prevented && hitItem) {
+                        var item = hitItem;
+                        while (item && !item.responds('mousedrag'))
+                            item = item._parent;
+                        if (item)
+                            dragItem = hitItem;
+                    }
                     downPoint = point;
                 } else if (mouse.up) {
-                    // Emulate click / doubleclick, but only on item, not view
-                    if (!prevented && item === downItem) {
+                    // Emulate click / doubleclick, but only on the hit-item,
+                    // not the view.
+                    if (!prevented && hitItem === downItem) {
                         clickTime = Date.now();
-                        emitMouseEvents(this, item,
-                                dblClick ? 'doubleclick' : 'click',
-                                event, point, downPoint);
+                        emitMouseEvents(this, hitItem, dblClick ? 'doubleclick'
+                                : 'click', event, point, downPoint);
                         dblClick = false;
                     }
                     downItem = dragItem = null;
@@ -1378,13 +1435,11 @@ new function() { // Injection scope for event handling on the browser
                     || called;
             }
 
-            // Now call preventDefault()`, if any of these conditions are met:
+            // Now call `preventDefault()`, if any of these conditions are met:
             // - If any of the handlers were called, except for mousemove events
-            //   which need to call `event.preventDefault()` explicitly, or
-            //   `return false;`.
-            // - If this is a mousedown event, and the view or tools respond to
-            //   mouseup.
-
+            //   which can call `preventDefault()` explicitly or return `false`.
+            // - If this is a unhandled mousedown event, but the view or tools
+            //   respond to mouseup.
             if (called && !mouse.move || mouse.down && responds('mouseup'))
                 event.preventDefault();
         },

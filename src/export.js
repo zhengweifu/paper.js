@@ -17,8 +17,6 @@
 // global one in the whole scope.
 
 paper = new (PaperScope.inject(Base.exports, {
-    // Mark fields as enumerable so PaperScope.inject can pick them up
-    enumerable: true,
     Base: Base,
     Numerical: Numerical,
     Key: Key,
@@ -35,8 +33,9 @@ paper = new (PaperScope.inject(Base.exports, {
 // If we're on node, require some additional functionality now before finishing:
 // - PaperScript support in require() with sourceMaps
 // - exportFrames / exportImage on CanvasView
-if (paper.agent.node)
-    require('./node/extend')(paper);
+if (paper.agent.node) {
+    require('./node/extend.js')(paper);
+}
 
 // https://github.com/umdjs/umd
 if (typeof define === 'function' && define.amd) {

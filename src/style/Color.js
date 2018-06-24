@@ -483,8 +483,8 @@ var Color = Base.extend(new function() {
          */
         initialize: function Color(arg) {
             // We are storing color internally as an array of components
-            var slice = Array.prototype.slice,
-                args = arguments,
+            var args = arguments,
+                reading = this.__read,
                 read = 0,
                 type,
                 components,
@@ -508,10 +508,10 @@ var Color = Base.extend(new function() {
                     alpha = args[2];
                 } else {
                     // For deserialization, shift out and process normally.
-                    if (this.__read)
+                    if (reading)
                         read = 1; // Will be increased below
                     // Shift type out of the arguments, and process normally.
-                    args = slice.call(args, 1);
+                    args = Base.slice(args, 1);
                     argType = typeof arg;
                 }
             }
@@ -536,12 +536,13 @@ var Color = Base.extend(new function() {
                                 : 'gray';
                     var length = types[type].length;
                     alpha = values[length];
-                    if (this.__read)
+                    if (reading) {
                         read += values === arguments
                             ? length + (alpha != null ? 1 : 0)
                             : 1;
+                    }
                     if (values.length > length)
-                        values = slice.call(values, 0, length);
+                        values = Base.slice(values, 0, length);
                 } else if (argType === 'string') {
                     type = 'rgb';
                     components = fromCSS(arg);
@@ -587,7 +588,7 @@ var Color = Base.extend(new function() {
                             // Allow implicit definition of gradients through
                             // stops / radial properties. Conversion happens
                             // here on the fly:
-                            if (value == null && i === 0 && type === 'gradient'
+                            if (value == null && !i && type === 'gradient'
                                     && 'stops' in arg) {
                                 value = {
                                     stops: arg.stops,
@@ -601,14 +602,11 @@ var Color = Base.extend(new function() {
                         alpha = arg.alpha;
                     }
                 }
-                if (this.__read && type)
+                if (reading && type)
                     read = 1;
             }
             // Default fallbacks: rgb, black
             this._type = type || 'rgb';
-            // Define this Color's unique id in its own private id pool.
-            // NOTE: This is only required by SVG Export code!
-            this._id = UID.get(Color);
             if (!components) {
                 // Produce a components array now, and parse values. Even if no
                 // values are defined, parsers are still called to produce
@@ -624,9 +622,19 @@ var Color = Base.extend(new function() {
             this._components = components;
             this._properties = types[this._type];
             this._alpha = alpha;
-            if (this.__read)
+            if (reading)
                 this.__read = read;
+            return this;
         },
+
+        /**
+         * Sets the color to the passed values. Note that any sequence of
+         * parameters that is supported by the various {@link Color()}
+         * constructors also work for calls of `set()`.
+         *
+         * @function
+         */
+        set: '#initialize',
 
         _serialize: function(options, dictionary) {
             var components = this.getComponents();
@@ -761,7 +769,7 @@ var Color = Base.extend(new function() {
                     : color;
             return col === this || col && this._class === col._class
                     && this._type === col._type
-                    && this._alpha === col._alpha
+                    && this.getAlpha() === col.getAlpha()
                     && Base.equals(this._components, col._components)
                     || false;
         },
@@ -826,7 +834,7 @@ var Color = Base.extend(new function() {
                         + components.join(',') + ')';
         },
 
-        toCanvasStyle: function(ctx) {
+        toCanvasStyle: function(ctx, matrix) {
             if (this._canvasStyle)
                 return this._canvasStyle;
             // Normal colors are simply represented by their CSS string.
@@ -838,10 +846,20 @@ var Color = Base.extend(new function() {
                 stops = gradient._stops,
                 origin = components[1],
                 destination = components[2],
+                highlight = components[3],
+                inverse = matrix && matrix.inverted(),
                 canvasGradient;
+            // If the item's content is transformed by a matrix, we need to
+            // inverse transform the gradient points, as they are defined in
+            // item's parent coordinate system.
+            if (inverse) {
+                origin = inverse._transformPoint(origin);
+                destination = inverse._transformPoint(destination);
+                if (highlight)
+                    highlight = inverse._transformPoint(highlight);
+            }
             if (gradient._radial) {
-                var radius = destination.getDistance(origin),
-                    highlight = components[3];
+                var radius = destination.getDistance(origin);
                 if (highlight) {
                     var vector = highlight.subtract(origin);
                     if (vector.getLength() > radius)
@@ -855,12 +873,14 @@ var Color = Base.extend(new function() {
                         destination.x, destination.y);
             }
             for (var i = 0, l = stops.length; i < l; i++) {
-                var stop = stops[i];
+                var stop = stops[i],
+                    offset = stop._offset;
                 // Use the defined offset, and fall back to automatic linear
                 // calculation.
                 // NOTE: that if _offset is 0 for the first entry, the fall-back
                 // will be so too.
-                canvasGradient.addColorStop(stop._offset || i / (l - 1),
+                canvasGradient.addColorStop(
+                        offset == null ? i / (l - 1) : offset,
                         stop._color.toCanvasStyle());
             }
             return this._canvasStyle = canvasGradient;

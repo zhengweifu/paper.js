@@ -28,6 +28,8 @@ var Raster = Item.extend(/** @lends Raster# */{
         crossOrigin: null, // NOTE: Needs to be set before source to work!
         source: null
     },
+    // Prioritize `crossOrigin` over `source`:
+    _prioritize: ['crossOrigin'],
 
     // TODO: Implement type, width, height.
     // TODO: Have SymbolItem & Raster inherit from a shared class?
@@ -181,6 +183,16 @@ var Raster = Item.extend(/** @lends Raster# */{
         this.setSize(this.getWidth(), height);
     },
 
+    /**
+     * The loading state of the raster image.
+     *
+     * @bean
+     * @type Boolean
+     */
+    getLoaded: function() {
+        return this._loaded;
+    },
+
     isEmpty: function() {
         var size = this._size;
         return !size || size.width === 0 && size.height === 0;
@@ -207,7 +219,7 @@ var Raster = Item.extend(/** @lends Raster# */{
     /**
      * @private
      * @bean
-     * @deprecated use {@link #getResolution()} instead.
+     * @deprecated use {@link #resolution} instead.
      */
     getPpi: '#getResolution',
 
@@ -369,7 +381,7 @@ var Raster = Item.extend(/** @lends Raster# */{
     },
 
     setSource: function(src) {
-        var image = new window.Image(),
+        var image = new self.Image(),
             crossOrigin = this._crossOrigin;
         if (crossOrigin)
             image.crossOrigin = crossOrigin;

@@ -51,9 +51,9 @@ new function() {
                 if (!Numerical.isZero(scale.x - 1)
                         || !Numerical.isZero(scale.y - 1))
                     parts.push('scale(' + formatter.point(scale) +')');
-                if (skew && skew.x)
+                if (skew.x)
                     parts.push('skewX(' + formatter.number(skew.x) + ')');
-                if (skew && skew.y)
+                if (skew.y)
                     parts.push('skewY(' + formatter.number(skew.y) + ')');
                 attrs.transform = parts.join(' ');
             } else {
@@ -95,7 +95,7 @@ new function() {
         attrs.y -= size.height / 2;
         attrs.width = size.width;
         attrs.height = size.height;
-        attrs.href = options.embedImages === false && image && image.src
+        attrs.href = options.embedImages == false && image && image.src
                 || item.toDataURL();
         return SvgElement.create('image', attrs, formatter);
     }
@@ -115,8 +115,9 @@ new function() {
             if (length > 2) {
                 type = item._closed ? 'polygon' : 'polyline';
                 var parts = [];
-                for(var i = 0; i < length; i++)
+                for (var i = 0; i < length; i++) {
                     parts.push(formatter.point(segments[i]._point));
+                }
                 attrs.points = parts.join(' ');
             } else {
                 type = 'line';
@@ -232,9 +233,10 @@ new function() {
             for (var i = 0, l = stops.length; i < l; i++) {
                 var stop = stops[i],
                     stopColor = stop._color,
-                    alpha = stopColor.getAlpha();
+                    alpha = stopColor.getAlpha(),
+                    offset = stop._offset;
                 attrs = {
-                    offset: stop._offset || i / (l - 1)
+                    offset: offset == null ? i / (l - 1) : offset
                 };
                 if (stopColor)
                     attrs['stop-color'] = stopColor.toCSS(true);
@@ -324,7 +326,10 @@ new function() {
     function getDefinition(item, type) {
         if (!definitions)
             definitions = { ids: {}, svgs: {} };
-        return item && definitions.svgs[type + '-' + item._id];
+        // Use #__id for items that don't have internal #_id properties (Color),
+        // and give them ids from their own private id pool named 'svg'.
+        return item && definitions.svgs[type + '-'
+                + (item._id || item.__id || (item.__id = UID.get('svg')))];
     }
 
     function setDefinition(item, node, type) {
@@ -333,10 +338,11 @@ new function() {
         if (!definitions)
             getDefinition();
         // Have different id ranges per type
-        var id = definitions.ids[type] = (definitions.ids[type] || 0) + 1;
+        var typeId = definitions.ids[type] = (definitions.ids[type] || 0) + 1;
         // Give the svg node an id, and link to it from the item id.
-        node.id = type + '-' + id;
-        definitions.svgs[type + '-' + item._id] = node;
+        node.id = type + '-' + typeId;
+        // See getDefinition() for an explanation of #__id:
+        definitions.svgs[type + '-' + (item._id || item.__id)] = node;
     }
 
     function exportDefinitions(node, options) {
@@ -365,7 +371,7 @@ new function() {
             definitions = null;
         }
         return options.asString
-                ? new window.XMLSerializer().serializeToString(svg)
+                ? new self.XMLSerializer().serializeToString(svg)
                 : svg;
     }
 
@@ -411,6 +417,7 @@ new function() {
                     ? new Rectangle([0, 0], view.getViewSize())
                     : bounds === 'content'
                         ? Item._getBounds(children, matrix, { stroke: true })
+                            .rect
                         : Rectangle.read([bounds], 0, { readNull: true }),
                 attrs = {
                     version: '1.1',

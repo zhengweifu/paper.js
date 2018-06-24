@@ -26,11 +26,8 @@ var HitResult = Base.extend(/** @lends HitResult# */{
         // Inject passed values, so we can be flexible about the HitResult
         // properties.
         // This allows the definition of getters too, e.g. for 'pixel'.
-        if (values) {
-            // Make enumerable so toString() works.
-            values.enumerable = true;
+        if (values)
             this.inject(values);
-        }
     },
 
     /**
@@ -127,6 +124,8 @@ var HitResult = Base.extend(/** @lends HitResult# */{
                 // Only first or last segment hits on path (mutually exclusive
                 // with segments: true)
                 ends: false,
+                // Hit test the item position
+                position: false,
                 // Hit test the center of the bounds
                 center: false,
                 // Hit test the corners and side-centers of the bounding box

@@ -103,7 +103,7 @@ var SymbolItem = Item.extend(/** @lends SymbolItem# */{
 
     /**
      * @bean
-     * @deprecated use {@link #getDefinition()} instead.
+     * @deprecated use {@link #definition} instead.
      */
     getSymbol: '#getDefinition',
     setSymbol: '#setDefinition',
@@ -112,15 +112,13 @@ var SymbolItem = Item.extend(/** @lends SymbolItem# */{
         return this._definition._item.isEmpty();
     },
 
-
     _getBounds: function(matrix, options) {
         var item = this._definition._item;
         // Redirect the call to the definition item to calculate the bounds.
-        return item._getCachedBounds(matrix && matrix.appended(item._matrix),
-                options);
+        return item._getCachedBounds(item._matrix.prepended(matrix), options);
     },
 
-    _hitTestSelf: function(point, options, viewMatrix, strokeMatrix) {
+    _hitTestSelf: function(point, options, viewMatrix) {
         var res = this._definition._item._hitTest(point, options, viewMatrix);
         // TODO: When the symbol's definition is a path, should hitResult
         // contain information like HitResult#curve?

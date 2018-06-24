@@ -77,77 +77,98 @@ var Rectangle = Base.extend(/** @lends Rectangle# */{
      */
     initialize: function Rectangle(arg0, arg1, arg2, arg3) {
         var type = typeof arg0,
-            read = 0;
+            read;
         if (type === 'number') {
             // new Rectangle(x, y, width, height)
-            this.x = arg0;
-            this.y = arg1;
-            this.width = arg2;
-            this.height = arg3;
+            this._set(arg0, arg1, arg2, arg3);
             read = 4;
         } else if (type === 'undefined' || arg0 === null) {
             // new Rectangle(), new Rectangle(null)
-            this.x = this.y = this.width = this.height = 0;
+            this._set(0, 0, 0, 0);
             read = arg0 === null ? 1 : 0;
         } else if (arguments.length === 1) {
             // This can either be an array, or an object literal.
             if (Array.isArray(arg0)) {
-                this.x = arg0[0];
-                this.y = arg0[1];
-                this.width = arg0[2];
-                this.height = arg0[3];
+                this._set.apply(this, arg0);
                 read = 1;
             } else if (arg0.x !== undefined || arg0.width !== undefined) {
                 // Another rectangle or a simple object literal
                 // describing one. Use duck typing, and 0 as defaults.
-                this.x = arg0.x || 0;
-                this.y = arg0.y || 0;
-                this.width = arg0.width || 0;
-                this.height = arg0.height || 0;
+                this._set(arg0.x || 0, arg0.y || 0,
+                        arg0.width || 0, arg0.height || 0);
                 read = 1;
             } else if (arg0.from === undefined && arg0.to === undefined) {
-                // Use #_set to support whatever property the rectangle can
-                // take, but handle from/to separately below.
-                this.x = this.y = this.width = this.height = 0;
-                this._set(arg0);
+                // Use Base.filter() to support whatever property the rectangle
+                // can take, but handle from/to separately below.
+                this._set(0, 0, 0, 0);
+                Base.filter(this, arg0);
                 read = 1;
             }
         }
-        if (!read) {
+        if (read === undefined) {
             // Read a point argument and look at the next value to see whether
             // it's a size or a point, then read accordingly.
             // We're supporting both reading from a normal arguments list and
             // covering the Rectangle({ from: , to: }) constructor, through
             // Point.readNamed().
-            var point = Point.readNamed(arguments, 'from'),
-                next = Base.peek(arguments);
-            this.x = point.x;
-            this.y = point.y;
-            if (next && next.x !== undefined || Base.hasNamed(arguments, 'to')) {
+            var frm = Point.readNamed(arguments, 'from'),
+                next = Base.peek(arguments),
+                x = frm.x,
+                y = frm.y,
+                width,
+                height;
+            if (next && next.x !== undefined
+                    || Base.hasNamed(arguments, 'to')) {
                 // new Rectangle(from, to)
                 // Read above why we can use readNamed() to cover both cases.
                 var to = Point.readNamed(arguments, 'to');
-                this.width = to.x - point.x;
-                this.height = to.y - point.y;
+                width = to.x - x;
+                height = to.y - y;
                 // Check if horizontal or vertical order needs to be reversed.
-                if (this.width < 0) {
-                    this.x = to.x;
-                    this.width = -this.width;
+                if (width < 0) {
+                    x = to.x;
+                    width = -width;
                 }
-                if (this.height < 0) {
-                    this.y = to.y;
-                    this.height = -this.height;
+                if (height < 0) {
+                    y = to.y;
+                    height = -height;
                 }
             } else {
                 // new Rectangle(point, size)
                 var size = Size.read(arguments);
-                this.width = size.width;
-                this.height = size.height;
+                width = size.width;
+                height = size.height;
             }
+            this._set(x, y, width, height);
             read = arguments.__index;
+            // arguments.__filtered wouldn't survive the function call even if a
+            // previous arguments list was passed through Function#apply().
+            // Return it on the object instead, see Base.read()
+            var filtered = arguments.__filtered;
+            if (filtered)
+                this.__filtered = filtered;
         }
         if (this.__read)
             this.__read = read;
+        return this;
+    },
+
+    /**
+     * Sets the rectangle to the passed values. Note that any sequence of
+     * parameters that is supported by the various {@link Rectangle()}
+     * constructors also work for calls of `set()`.
+     *
+     * @function
+     */
+    set: '#initialize',
+
+    // See Point#_set() for an explanation of #_set():
+    _set: function(x, y, width, height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        return this;
     },
 
     /**
@@ -177,17 +198,6 @@ var Rectangle = Base.extend(/** @lends Rectangle# */{
      * @name Rectangle#height
      * @type Number
      */
-
-    /**
-     * @ignore
-     */
-    set: function(x, y, width, height) {
-        this.x = x;
-        this.y = y;
-        this.width = width;
-        this.height = height;
-        return this;
-    },
 
     /**
      * Returns a copy of the rectangle.
@@ -263,23 +273,34 @@ var Rectangle = Base.extend(/** @lends Rectangle# */{
         return new ctor(this.width, this.height, this, 'setSize');
     },
 
+    // properties to keep track of fix-width / height: They are on by default,
+    // and switched off once properties are used that change the outside of the
+    // rectangle, so combinations of: left / top / right / bottom.
+    _fw: 1,
+    _fh: 1,
+
     setSize: function(/* size */) {
-        var size = Size.read(arguments);
-        // Keep track of how dimensions were specified through this._fix*
+        var size = Size.read(arguments),
+            sx = this._sx,
+            sy = this._sy,
+            w = size.width,
+            h = size.height;
+        // Keep track of how dimensions were specified through this._s*
         // attributes.
-        // _fixX / Y can either be 0 (l), 0.5 (center) or 1 (r), and is used as
-        // direct factors to calculate the x / y adujstments from the size
-        // differences.
-        // _fixW / H is either 0 (off) or 1 (on), and is used to protect
-        // widht / height values against changes.
-        if (this._fixX)
-            this.x += (this.width - size.width) * this._fixX;
-        if (this._fixY)
-            this.y += (this.height - size.height) * this._fixY;
-        this.width = size.width;
-        this.height = size.height;
-        this._fixW = 1;
-        this._fixH = 1;
+        // _sx / _sy can either be 0 (left), 0.5 (center) or 1 (right), and is
+        // used as direct factors to calculate the x / y adjustments from the
+        // size differences.
+        // _fw / _fh can either be 0 (off) or 1 (on), and is used to protect
+        // width / height values against changes.
+        if (sx) {
+            this.x += (this.width - w) * sx;
+        }
+        if (sy) {
+            this.y += (this.height - h) * sy;
+        }
+        this.width = w;
+        this.height = h;
+        this._fw = this._fh = 1;
     },
 
     /**
@@ -296,10 +317,12 @@ var Rectangle = Base.extend(/** @lends Rectangle# */{
     },
 
     setLeft: function(left) {
-        if (!this._fixW)
-            this.width -= left - this.x;
+        if (!this._fw) {
+            var amount = left - this.x;
+            this.width -= this._sx === 0.5 ? amount * 2 : amount;
+        }
         this.x = left;
-        this._fixX = 0;
+        this._sx = this._fw = 0;
     },
 
     /**
@@ -314,10 +337,12 @@ var Rectangle = Base.extend(/** @lends Rectangle# */{
     },
 
     setTop: function(top) {
-        if (!this._fixH)
-            this.height -= top - this.y;
+        if (!this._fh) {
+            var amount = top - this.y;
+            this.height -= this._sy === 0.5 ? amount * 2 : amount;
+        }
         this.y = top;
-        this._fixY = 0;
+        this._sy = this._fh = 0;
     },
 
     /**
@@ -332,14 +357,13 @@ var Rectangle = Base.extend(/** @lends Rectangle# */{
     },
 
     setRight: function(right) {
-        // Turn _fixW off if we specify two _fixX values
-        if (this._fixX !== undefined && this._fixX !== 1)
-            this._fixW = 0;
-        if (this._fixW)
-            this.x = right - this.width;
-        else
-            this.width = right - this.x;
-        this._fixX = 1;
+        if (!this._fw) {
+            var amount = right - this.x;
+            this.width = this._sx === 0.5 ? amount * 2 : amount;
+        }
+        this.x = right - this.width;
+        this._sx = 1;
+        this._fw = 0;
     },
 
     /**
@@ -354,14 +378,13 @@ var Rectangle = Base.extend(/** @lends Rectangle# */{
     },
 
     setBottom: function(bottom) {
-        // Turn _fixH off if we specify two _fixY values
-        if (this._fixY !== undefined && this._fixY !== 1)
-            this._fixH = 0;
-        if (this._fixH)
-            this.y = bottom - this.height;
-        else
-            this.height = bottom - this.y;
-        this._fixY = 1;
+        if (!this._fh) {
+            var amount = bottom - this.y;
+            this.height = this._sy === 0.5 ? amount * 2 : amount;
+        }
+        this.y = bottom - this.height;
+        this._sy = 1;
+        this._fh = 0;
     },
 
     /**
@@ -372,12 +395,22 @@ var Rectangle = Base.extend(/** @lends Rectangle# */{
      * @ignore
      */
     getCenterX: function() {
-        return this.x + this.width * 0.5;
+        return this.x + this.width / 2;
     },
 
     setCenterX: function(x) {
-        this.x = x - this.width * 0.5;
-        this._fixX = 0.5;
+        // If we're asked to fix the width or if _sx is already in center mode,
+        // just keep moving the center.
+        if (this._fw || this._sx === 0.5) {
+            this.x = x - this.width / 2;
+        } else {
+            if (this._sx) {
+                this.x += (x - this.x) * 2 * this._sx;
+            }
+            this.width = (x - this.x) * 2;
+        }
+        this._sx = 0.5;
+        this._fw = 0;
     },
 
     /**
@@ -388,12 +421,22 @@ var Rectangle = Base.extend(/** @lends Rectangle# */{
      * @ignore
      */
     getCenterY: function() {
-        return this.y + this.height * 0.5;
+        return this.y + this.height / 2;
     },
 
     setCenterY: function(y) {
-        this.y = y - this.height * 0.5;
-        this._fixY = 0.5;
+        // If we're asked to fix the height or if _sy is already in center mode,
+        // just keep moving the center.
+        if (this._fh || this._sy === 0.5) {
+            this.y = y - this.height / 2;
+        } else {
+            if (this._sy) {
+                this.y += (y - this.y) * 2 * this._sy;
+            }
+            this.height = (y - this.y) * 2;
+        }
+        this._sy = 0.5;
+        this._fh = 0;
     },
 
     /**
@@ -595,12 +638,15 @@ var Rectangle = Base.extend(/** @lends Rectangle# */{
 
     /**
      * Tests if the interior of this rectangle intersects the interior of
-     * another rectangle. Rectangles just touching each other are considered
-     * as non-intersecting.
+     * another rectangle. Rectangles just touching each other are considered as
+     * non-intersecting, except if a `epsilon` value is specified by which this
+     * rectangle's dimensions are increased before comparing.
      *
      * @param {Rectangle} rect the specified rectangle
+     * @param {Number} [epsilon=0] the epsilon against which to compare the
+     *     rectangle's dimensions
      * @return {Boolean} {@true if the rectangle and the specified rectangle
-     * intersect each other}
+     *     intersect each other}
      *
      * @example {@paperscript}
      * // Checking whether the bounding box of one item intersects with
@@ -637,20 +683,13 @@ var Rectangle = Base.extend(/** @lends Rectangle# */{
      *     }
      * }
      */
-    intersects: function(/* rect */) {
-        var rect = Rectangle.read(arguments);
-        return rect.x + rect.width > this.x
-                && rect.y + rect.height > this.y
-                && rect.x < this.x + this.width
-                && rect.y < this.y + this.height;
-    },
-
-    touches: function(/* rect */) {
-        var rect = Rectangle.read(arguments);
-        return rect.x + rect.width >= this.x
-                && rect.y + rect.height >= this.y
-                && rect.x <= this.x + this.width
-                && rect.y <= this.y + this.height;
+    intersects: function(/* rect, epsilon */) {
+        var rect = Rectangle.read(arguments),
+            epsilon = Base.read(arguments) || 0;
+        return rect.x + rect.width > this.x - epsilon
+                && rect.y + rect.height > this.y - epsilon
+                && rect.x < this.x + this.width + epsilon
+                && rect.y < this.y + this.height + epsilon;
     },
 
     /**
@@ -842,12 +881,13 @@ var Rectangle = Base.extend(/** @lends Rectangle# */{
 var LinkedRectangle = Rectangle.extend({
     // Have LinkedRectangle appear as a normal Rectangle in debugging
     initialize: function Rectangle(x, y, width, height, owner, setter) {
-        this.set(x, y, width, height, true);
+        this._set(x, y, width, height, true);
         this._owner = owner;
         this._setter = setter;
     },
 
-    set: function(x, y, width, height, _dontNotify) {
+    // See Point#_set() for an explanation of #_set():
+    _set: function(x, y, width, height, _dontNotify) {
         this._x = x;
         this._y = y;
         this._width = width;
@@ -917,8 +957,8 @@ new function() {
 
             setSelected: function(selected) {
                 var owner = this._owner;
-                if (owner.changeSelection) {
-                    owner.changeSelection(/*#=*/ItemSelection.BOUNDS, selected);
+                if (owner._changeSelection) {
+                    owner._changeSelection(/*#=*/ItemSelection.BOUNDS, selected);
                 }
             }
         })

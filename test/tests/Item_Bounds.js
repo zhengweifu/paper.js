@@ -207,7 +207,6 @@ test('path.bounds & path.strokeBounds with stroke styles', function() {
     }
 
     var path = makePath();
-    path.fullySelected = true;
     path.strokeColor = 'black';
     path.strokeCap = 'butt';
     path.strokeJoin = 'round';
@@ -695,12 +694,15 @@ test('path.strokeBounds with applyMatrix disabled', function() {
         strokeColor: 'red',
         strokeWidth: 10
     });
-    equals(path.strokeBounds, new Rectangle(5, 5, 30, 30), 'path.strokeBounds, applyMatrix enabled');
+    equals(path.strokeBounds, new Rectangle(5, 5, 30, 30),
+            'path.strokeBounds, applyMatrix enabled');
     path.applyMatrix = false;
-    equals(path.strokeBounds, new Rectangle(5, 5, 30, 30), 'path.strokeBounds, applyMatrix disabled');
+    equals(path.strokeBounds, new Rectangle(5, 5, 30, 30),
+            'path.strokeBounds, applyMatrix disabled');
     path.scale([4, 2], [0, 0]);
     var expected = new Rectangle(20, 10, 120, 60);
-    equals(path.strokeBounds, expected, 'path.strokeBounds after scaling, applyMatrix disabled');
+    equals(path.strokeBounds, expected,
+            'path.strokeBounds after scaling, applyMatrix disabled');
     function testHitResult() {
         // Hit-testing needs to handle applyMatrix disabled with stroke scaling,
         // even when hit-testing on "distorted" stroke joins:
@@ -715,8 +717,27 @@ test('path.strokeBounds with applyMatrix disabled', function() {
     testHitResult();
     path.applyMatrix = true;
     expected = new Rectangle(35, 15, 90, 50);
-    equals(path.strokeBounds, expected, 'path.strokeBounds after scaling, applyMatrix enabled');
+    equals(path.strokeBounds, expected,
+            'path.strokeBounds after scaling, applyMatrix enabled');
     testHitResult();
+});
+
+test('TEST', function() {
+    var path = new Path.Rectangle({
+        applyMatrix: false,
+        point: [10, 10],
+        size: [20, 20],
+        strokeScaling: true,
+        strokeColor: 'red',
+        strokeWidth: 10
+    });
+    path.scale([4, 2], [0, 0]);
+    equals(path.strokeBounds, new Rectangle(20, 10, 120, 60),
+            'path.strokeBounds after scaling, applyMatrix disabled');
+    path.applyMatrix = true;
+    equals(path.strokeBounds, new Rectangle(35, 15, 90, 50),
+            'path.strokeBounds after scaling, applyMatrix enabled');
+
 });
 
 test('symbolItem.bounds with strokeScaling disabled', function() {
@@ -730,8 +751,41 @@ test('symbolItem.bounds with strokeScaling disabled', function() {
     var placed = symbol.place([100, 100]);
     equals(placed.bounds, new Rectangle(85, 85, 30, 30), 'placed.bounds');
     placed.scale(4, 2);
-    equals(placed.bounds, new Rectangle(55, 75, 90, 50), 'placed.bounds after scaling');
+    equals(placed.bounds, new Rectangle(55, 75, 90, 50),
+            'placed.bounds after scaling');
     path.strokeScaling = true;
-    equals(placed.bounds, new Rectangle(40, 70, 120, 60), 'placed.bounds after scaling, strokeScaling enabled');
+    equals(placed.bounds, new Rectangle(40, 70, 120, 60),
+            'placed.bounds after scaling, strokeScaling enabled');
 });
 
+test('item.visible and item.parents.bounds (#1248)', function() {
+    var item = new Path.Rectangle({
+       point: [0, 0],
+       size: [50, 100],
+       visible: false
+    });
+    equals(item.bounds, new Rectangle(0, 0, 50, 100), 'item.bounds');
+    equals(item.parent.bounds, new Rectangle(0, 0, 0, 0),
+            'item.parent.bounds with item.visible = false');
+    item.visible = true;
+    equals(item.parent.bounds, item.bounds,
+            'item.parent.bounds with item.visible = true');
+});
+
+test('group.internalBounds with child and child.applyMatrix = false (#1250)', function() {
+    var item1 = Shape.Rectangle({
+        point: [100, 100],
+        size: [200, 200]
+    });
+    var item2 = new Path.Rectangle({
+        point: [0, 0],
+        size: [100, 100]
+    });
+    var group = new Group([item1, item2]);
+    equals(item1.bounds, new Rectangle(100, 100, 200, 200), 'item.bounds');
+    equals(group.internalBounds, new Rectangle(0, 0, 300, 300),
+            'group.internalBounds before scaling item1');
+    item1.scale(0.5);
+    equals(group.internalBounds, new Rectangle(0, 0, 250, 250),
+            'group.internalBounds after scaling item1');
+});

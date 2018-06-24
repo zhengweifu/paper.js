@@ -14,13 +14,34 @@
  * @name PaperScript
  * @namespace
  */
-Base.exports.PaperScript = (function() {
-    // Locally turn of exports and define for inlined acorn.
-    // Just declaring the local vars is enough, as they will be undefined.
-    var exports, define,
-        // The scope into which the library is loaded.
-        scope = this;
-/*#*/ include('../../node_modules/acorn/acorn.min.js', { exports: false });
+Base.exports.PaperScript = function() {
+    // `this` == global scope, as the function is called with `.call(this);`
+    var global = this,
+        // See if there is a global Acorn in the browser already.
+        acorn = global.acorn;
+    // Also try importing an outside version of Acorn.
+    if (!acorn && typeof require !== 'undefined') {
+        try { acorn = require('acorn'); } catch(e) {}
+    }
+    // If no Acorn was found, load the bundled version.
+    if (!acorn) {
+        // Provide our own local exports and module object so that Acorn gets
+        // assigned to it and ends up in the local acorn object.
+        var exports, module;
+        acorn = exports = module = {};
+/*#*/ include('../../node_modules/acorn/acorn.js', { exports: false });
+        // Clear object again if it wasn't loaded here; for load.js, see below.
+        if (!acorn.version)
+            acorn = null;
+    }
+
+    function parse(code, options) {
+        // NOTE: When using load.js, Acorn will end up in global.acorn and will
+        // not be immediately available, so we need to check for it here again.
+        // We also give global.acorn the preference over the bundled one, so
+        // people can load their own preferred version in sketch.paperjs.org
+        return (global.acorn || acorn).parse(code, options);
+    }
 
     // Operators to overload
 
@@ -31,25 +52,29 @@ Base.exports.PaperScript = (function() {
         '*': '__multiply',
         '/': '__divide',
         '%': '__modulo',
-        // Use the real equals.
-        '==': 'equals',
-        '!=': 'equals'
+        '==': '__equals',
+        '!=': '__equals'
     };
 
     var unaryOperators = {
         '-': '__negate',
-        '+': null
+        '+': '__self'
     };
 
     // Inject underscored math methods as aliases to Point, Size and Color.
     var fields = Base.each(
-        ['add', 'subtract', 'multiply', 'divide', 'modulo', 'negate'],
+        ['add', 'subtract', 'multiply', 'divide', 'modulo', 'equals', 'negate'],
         function(name) {
             // Create an alias for each math method to be injected into the
             // classes using Straps.js' #inject()
             this['__' + name] = '#' + name;
         },
-        {}
+        {
+            // Needed for '+' unary operator:
+            __self: function() {
+                return this;
+            }
+        }
     );
     Point.inject(fields);
     Size.inject(fields);
@@ -80,7 +105,7 @@ Base.exports.PaperScript = (function() {
     // Unary Operator Handler
     function $__(operator, value) {
         var handler = unaryOperators[operator];
-        if (handler && value && value[handler])
+        if (value && value[handler])
             return value[handler]();
         switch (operator) {
         case '+': return +value;
@@ -89,10 +114,6 @@ Base.exports.PaperScript = (function() {
     }
 
     // AST Helpers
-
-    function parse(code, options) {
-        return scope.acorn.parse(code, options);
-    }
 
     /**
      * Compiles PaperScript code into JavaScript code.
@@ -252,9 +273,13 @@ Base.exports.PaperScript = (function() {
                         if (/^.=$/.test(node.operator)
                                 && node.left.type !== 'Literal') {
                             var left = getCode(node.left),
-                                right = getCode(node.right);
-                            replaceCode(node, left + ' = __$__(' + left + ', "'
-                                    + node.operator[0] + '", ' + right + ')');
+                                right = getCode(node.right),
+                                exp = left + ' = __$__(' + left + ', "'
+                                    + node.operator[0] + '", ' + right + ')';
+                            // If the original expression is wrapped in
+                            // parenthesis, do the same with the replacement:
+                            replaceCode(node, /^\(.*\)$/.test(getCode(node))
+                                    ? '(' + exp + ')' : exp);
                         }
                     }
                 }
@@ -319,7 +344,7 @@ Base.exports.PaperScript = (function() {
                     agent.firefox && version >= 40 ||
                     agent.node);
             var mappings = ['AA' + encodeVLQ(offsetCode ? 0 : offset) + 'A'];
-                // Create empty entries by the amount of lines + 1, so join can be
+            // Create empty entries by the amount of lines + 1, so join can be
             // used below to produce the actual instructions that many times.
             mappings.length = (code.match(lineBreaks) || []).length + 1
                     + (offsetCode ? offset : 0);
@@ -339,7 +364,7 @@ Base.exports.PaperScript = (function() {
             };
         }
         // Now do the parsing magic
-        walkAST(parse(code, { ranges: true }));
+        walkAST(parse(code, { ranges: true, preserveParens: true }));
         if (map) {
             if (offsetCode) {
                 // Adjust the line offset of the resulting code if required.
@@ -348,7 +373,7 @@ Base.exports.PaperScript = (function() {
             }
             if (/^(inline|both)$/.test(sourceMaps)) {
                 code += "\n//# sourceMappingURL=data:application/json;base64,"
-                        + window.btoa(unescape(encodeURIComponent(
+                        + self.btoa(unescape(encodeURIComponent(
                             JSON.stringify(map))));
             }
             code += "\n//# sourceURL=" + (url || 'paperscript');
@@ -591,4 +616,4 @@ Base.exports.PaperScript = (function() {
     };
 // Pass on `this` as the binding object, so we can reference Acorn both in
 // development and in the built library.
-}).call(this);
+}.call(this);

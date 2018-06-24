@@ -14,7 +14,7 @@ var gulp = require('gulp'),
     del = require('del'),
     rename = require('gulp-rename'),
     shell = require('gulp-shell'),
-    options = require('../utils/options.js')({ suffix: true });
+    options = require('../utils/options.js');
 
 var docOptions = {
     local: 'docs', // Generates the offline docs
@@ -22,23 +22,25 @@ var docOptions = {
 };
 
 gulp.task('docs', ['docs:local', 'build:full'], function() {
-    gulp.src('dist/paper-full.js')
+    return gulp.src('dist/paper-full.js')
         .pipe(rename({ basename: 'paper' }))
         .pipe(gulp.dest('dist/docs/assets/js/'));
 });
 
 Object.keys(docOptions).forEach(function(name) {
-    gulp.task('docs:' + name, ['clean:docs:' + name], shell.task([
-        'java -cp jsrun.jar:lib/* JsRun app/run.js -c=conf/' + name + '.conf ' +
-            '-D="renderMode:' + docOptions[name] + '" ' +
-            '-D="version:' + options.version + '"'
-    ], {
-        cwd: 'gulp/jsdoc'
-    }));
+    gulp.task('docs:' + name, ['clean:docs:' + name], function() {
+        var mode = docOptions[name];
+        return gulp.src('src')
+            .pipe(shell(
+                ['java -cp jsrun.jar:lib/* JsRun app/run.js',
+                ' -c=conf/', name, '.conf ',
+                ' -D="renderMode:', mode, '" ',
+                ' -D="version:', options.version, '"'].join(''),
+                { cwd: 'gulp/jsdoc' })
+            )
+    });
 
     gulp.task('clean:docs:' + name, function() {
-        return del([
-            'dist/' + docOptions[name] + '/**',
-        ]);
+        return del([ 'dist/' + docOptions[name] + '/**' ]);
     });
 });

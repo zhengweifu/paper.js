@@ -31,7 +31,6 @@ test('copyTo(project)', function() {
 test('copyTo(layer)', function() {
     var project = paper.project;
     var path = new Path();
-
     var layer = new Layer();
     var copy = path.copyTo(layer);
     equals(function() {
@@ -190,106 +189,137 @@ test('item.addChildren() / item.removeChildren()', function() {
 
 test('item.lastChild / item.firstChild', function() {
     var project = paper.project;
-    var path = new Path();
-    var secondPath = new Path();
+    var path1 = new Path();
+    var path2 = new Path();
     equals(function() {
-        return project.activeLayer.firstChild == path;
+        return project.activeLayer.firstChild == path1;
     }, true);
     equals(function() {
-        return project.activeLayer.lastChild == secondPath;
+        return project.activeLayer.lastChild == path2;
     }, true);
 });
 
 test('item.nextSibling / item.previousSibling', function() {
-    var firstPath = new Path();
-    var secondPath = new Path();
+    var path1 = new Path();
+    var path2 = new Path();
     equals(function() {
-        return firstPath.previousSibling == null;
+        return path1.previousSibling == null;
     }, true);
     equals(function() {
-        return firstPath.nextSibling == secondPath;
+        return path1.nextSibling == path2;
     }, true);
     equals(function() {
-        return secondPath.previousSibling == firstPath;
+        return path2.previousSibling == path1;
     }, true);
     equals(function() {
-        return secondPath.nextSibling == null;
+        return path2.nextSibling == null;
     }, true);
 });
 
 test('item.replaceWith(other)', function() {
     var project = paper.project;
-    var path = new Path();
-    var secondPath = new Path();
-    var thirdPath = new Path();
+    var path1 = new Path();
+    var path2 = new Path();
+    var path3 = new Path();
     equals(function() {
         return project.activeLayer.children.length;
     }, 3);
-    path.replaceWith(secondPath);
+    equals(function() {
+        return path1.replaceWith(path2) == path2;
+    }, true);
     equals(function() {
         return project.activeLayer.children.length;
     }, 2);
     equals(function() {
-        return path.parent == null;
+        return path1.parent == null;
     }, true);
     equals(function() {
-        return secondPath.previousSibling == null;
+        return path2.previousSibling == null;
     }, true);
     equals(function() {
-        return secondPath.nextSibling == thirdPath;
+        return path2.nextSibling == path3;
+    }, true);
+});
+
+test('item.replaceWith(item)', function() {
+    var item = new Path();
+    equals(function() {
+        return item.replaceWith(item) == null;
+    }, true);
+    equals(function() {
+        return item.getParent() != null;
     }, true);
 });
 
 test('item.insertChild(0, child)', function() {
     var project = paper.project;
-    var path = new Path();
-    var secondPath = new Path();
-    project.activeLayer.insertChild(0, secondPath);
+    var path1 = new Path();
+    var path2 = new Path();
+    project.activeLayer.insertChild(0, path2);
     equals(function() {
-        return secondPath.index < path.index;
+        return path2.index < path1.index;
     }, true);
 });
 
 test('item.insertAbove(other)', function() {
-    var project = paper.project;
-    var path = new Path();
-    var secondPath = new Path();
-    path.insertAbove(secondPath);
+    var path1 = new Path();
+    var path2 = new Path();
     equals(function() {
-        return project.activeLayer.lastChild == path;
+        return path2.index > path1.index;
+    }, true);
+    equals(function() {
+        return path1.insertAbove(path2) == path1;
+    }, true);
+    equals(function() {
+        return path2.index < path1.index;
+    }, true);
+    equals(function() {
+        return paper.project.activeLayer.lastChild == path1;
     }, true);
 });
 
 test('item.insertBelow(other)', function() {
-    var project = paper.project;
-    var firstPath = new Path();
-    var secondPath = new Path();
+    var path1 = new Path();
+    var path2 = new Path();
     equals(function() {
-        return secondPath.index > firstPath.index;
+        return path2.index > path1.index;
     }, true);
-    secondPath.insertBelow(firstPath);
     equals(function() {
-        return secondPath.index < firstPath.index;
+        return path2.insertBelow(path1) == path2;
+    }, true);
+    equals(function() {
+        return path2.index < path1.index;
+    }, true);
+    equals(function() {
+        return paper.project.activeLayer.lastChild == path1;
+    }, true);
+});
+
+test('item.insertAbove(item)', function() {
+    var path = new Path();
+    equals(function() {
+        return path.insertAbove(path) == null;
+    }, true);
+    equals(function() {
+        return path.insertBelow(path) == null;
     }, true);
 });
 
 test('item.sendToBack()', function() {
-    var project = paper.project;
-    var firstPath = new Path();
-    var secondPath = new Path();
-    secondPath.sendToBack();
+    var path1 = new Path();
+    var path2 = new Path();
+    path2.sendToBack();
     equals(function() {
-        return secondPath.index === 0;
+        return path2.index === 0;
     }, true);
 });
 
 test('item.bringToFront()', function() {
-    var project = paper.project;
-    var firstPath = new Path();
-    var secondPath = new Path();
-    firstPath.bringToFront();
+    var path1 = new Path();
+    var path2 = new Path();
+    path1.bringToFront();
     equals(function() {
-        return firstPath.index == 1;
+        return path1.index == 1;
     }, true);
 });
 
@@ -320,7 +350,6 @@ test('item.isDescendant(other) / item.isAncestor(other)', function() {
 });
 
 test('item.addChildren(items)', function() {
-    var project = paper.project;
     var path1 = new Path(),
         path2 = new Path(),
         path3 = new Path(),
@@ -350,18 +379,17 @@ test('item.addChildren(items)', function() {
 });
 
 test('item.isGroupedWith(other)', function() {
-    var project = paper.project;
     var path = new Path();
-    var secondPath = new Path();
+    var path2 = new Path();
     var group = new Group([path]);
-    var secondGroup = new Group([secondPath]);
+    var secondGroup = new Group([path2]);
 
     equals(function() {
-        return path.isGroupedWith(secondPath);
+        return path.isGroupedWith(path2);
     }, false);
     secondGroup.addChild(path);
     equals(function() {
-        return path.isGroupedWith(secondPath);
+        return path.isGroupedWith(path2);
     }, true);
     equals(function() {
         return path.isGroupedWith(group);
@@ -380,19 +408,19 @@ test('item.isGroupedWith(other)', function() {
     }, false);
     paper.project.activeLayer.addChild(path);
     equals(function() {
-        return path.isGroupedWith(secondPath);
+        return path.isGroupedWith(path2);
     }, false);
-    paper.project.activeLayer.addChild(secondPath);
+    paper.project.activeLayer.addChild(path2);
     equals(function() {
-        return path.isGroupedWith(secondPath);
+        return path.isGroupedWith(path2);
     }, false);
 });
 
 test('reverseChildren()', function() {
     var project = paper.project;
     var path = new Path();
-    var secondPath = new Path();
-    var thirdPath = new Path();
+    var path2 = new Path();
+    var path3 = new Path();
     equals(function() {
         return project.activeLayer.firstChild == path;
     }, true);
@@ -401,7 +429,7 @@ test('reverseChildren()', function() {
         return project.activeLayer.firstChild == path;
     }, false);
     equals(function() {
-        return project.activeLayer.firstChild == thirdPath;
+        return project.activeLayer.firstChild == path3;
     }, true);
     equals(function() {
         return project.activeLayer.lastChild == path;
@@ -409,7 +437,6 @@ test('reverseChildren()', function() {
 });
 
 test('Check item#project when moving items across projects', function() {
-    var project = paper.project;
     var doc1 = new Project();
     var path = new Path();
     var group = new Group();
@@ -760,9 +787,10 @@ test('Item#applyMatrix', function() {
 
     var path = new Path.Rectangle({
         size: [100, 100],
-        position: [0, 0],
-        applyMatrix: false
+        position: [0, 0]
     });
+
+    path.applyMatrix = false;
 
     equals(path.matrix, new Matrix(),
             'path.matrix before scaling');
@@ -847,4 +875,57 @@ test('Item#pivot', function() {
     path2.position = path2.position.add(difference);
     equals(path2.pivot, pivot.add(difference),
             'Changing position of an item with applyMatrix = true should change pivot');
+});
+
+test('Item#position with irregular shape, #pivot and rotation', function() {
+    var path1 = new Path([ [0, 0], [200, 100], [0, 100] ]);
+    var path2 = path1.clone();
+    path2.pivot = path2.position;
+    equals(path1.position, new Point(100, 50),
+            'path1.position, before rotation');
+    path1.rotate(45);
+    equals(path1.position, new Point(64.64466, 50),
+            'path1.position, after rotation');
+    equals(path2.position, new Point(100, 50),
+            'path2.position with pivot, before rotation');
+    path2.rotate(45);
+    equals(path2.position, new Point(100, 50),
+            'path2.position with pivot, after rotation');
+});
+
+test('Item#scaling, #rotation', function() {
+    var expected = new Rectangle(100, 50, 100, 200);
+
+    var rect1 = new Path.Rectangle({
+        from: [100, 100],
+        to: [200, 200],
+        applyMatrix: false
+    });
+    var rect2 = rect1.clone();
+
+    rect1.scaling = [2, 1];
+    rect1.rotation = 90;
+    equals(rect1.bounds, expected,
+            'rect1.bounds, setting rect1.scaling before rect1.rotation');
+
+    rect2.rotation = 90;
+    rect2.scaling = [2, 1];
+    equals(rect2.bounds, expected,
+            'rect2.bounds, setting rect2.scaling before rect2.rotation');
+
+    var shape1 = new Shape.Rectangle({
+        from: [100, 100],
+        to: [200, 200]
+    });
+    var shape2 = shape1.clone();
+
+    shape1.scaling = [2, 1];
+    shape1.rotation = 90;
+    equals(shape1.bounds, expected,
+            'shape1.bounds, setting shape1.scaling before shape1.rotation');
+
+    shape2.rotation = 90;
+    shape2.scaling = [2, 1];
+    equals(shape2.bounds, expected,
+            'shape2.bounds, setting shape2.scaling before shape2.rotation');
 });

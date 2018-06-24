@@ -28,7 +28,7 @@
  *
  * // Only execute onMouseDrag when the mouse
  * // has moved at least 10 points:
- * tool.distanceThreshold = 10;
+ * tool.minDistance = 10;
  *
  * tool.onMouseDown = function(event) {
  *     // Create a new path every time the mouse is clicked
@@ -56,7 +56,7 @@ var Tool = PaperScopeItem.extend(/** @lends Tool# */{
         // -1 so first event is 0:
         this._moveCount = -1;
         this._downCount = -1;
-        this._set(props);
+        this.set(props);
     },
 
     /**

@@ -80,12 +80,17 @@ var Emitter = {
         var handlers = this._callbacks && this._callbacks[type];
         if (!handlers)
             return false;
-        var args = [].slice.call(arguments, 1);
+        var args = Base.slice(arguments, 1),
+            // Set the current target to `this` if the event object defines
+            // #target but not #currentTarget.
+            setTarget = event && event.target && !event.currentTarget;
         // Create a clone of the handlers list so changes caused by on / off
         // won't throw us off track here:
         handlers = handlers.slice();
+        if (setTarget)
+            event.currentTarget = this;
         for (var i = 0, l = handlers.length; i < l; i++) {
-            if (handlers[i].apply(this, args) === false) {
+            if (handlers[i].apply(this, args) == false) {
                 // If the handler returns false, prevent the default behavior
                 // and stop propagation of the event by calling stop()
                 if (event && event.stop)
@@ -94,6 +99,8 @@ var Emitter = {
                 break;
            }
         }
+        if (setTarget)
+            delete event.currentTarget;
         return true;
     },
 
@@ -118,7 +125,7 @@ var Emitter = {
                     if (func)
                         func.call(this, type);
                 }
-        }
+            }
         }
     },
 

@@ -19,7 +19,8 @@ new function() {
     // objects, dealing with baseVal, and item lists.
     // index is option, and if passed, causes a lookup in a list.
 
-    var rootSize;
+    var definitions = {},
+        rootSize;
 
     function getValue(node, name, isString, allowNull, allowPercent) {
         // Interpret value as number. Never return NaN, but 0 instead.
@@ -221,9 +222,8 @@ new function() {
                 // half of its size. We also need to take the raster's matrix
                 // into account, which will be defined by the time the load
                 // event is called.
-                var center = this._matrix._transformPoint(
-                        getPoint(node).add(size.divide(2)));
-                this.translate(center);
+                var center = getPoint(node).add(size.divide(2));
+				this._matrix.append(new Matrix().translate(center));
             });
             return raster;
         },
@@ -388,13 +388,6 @@ new function() {
                                 .translate(bounds.getPoint())
                                 .scale(bounds.getSize()));
                         }
-                        if (item instanceof Shape) {
-                            // When applying gradient colors to shapes, we need
-                            // to offset the shape's initial position to get the
-                            // same results as SVG.
-                            color.transform(new Matrix().translate(
-                                item.getPosition(true).negate()));
-                        }
                     }
                 }
             }
@@ -527,36 +520,39 @@ new function() {
      * @param {Item} item the item to apply the style and attributes to
      */
     function applyAttributes(item, node, isRoot) {
-        // SVG attributes can be set both as styles and direct node attributes,
-        // so we need to handle both.
-        var parent = node.parentNode,
-            styles = {
-                node: DomElement.getStyles(node) || {},
-                // Do not check for inheritance if this is root, since we want
-                // the default SVG settings to stick. Also detect defs parents,
-                // of which children need to explicitly inherit their styles.
-                parent: !isRoot && !/^defs$/i.test(parent.tagName)
-                        && DomElement.getStyles(parent) || {}
-            };
-        Base.each(attributes, function(apply, name) {
-            var value = getAttribute(node, name, styles);
-            // 'clip-path' attribute returns a new item, support it here:
-            item = value !== undefined && apply(item, value, name, node, styles)
-                    || item;
-        });
+        if (node.style) {
+            // SVG attributes can be set both as styles and direct node
+            // attributes, so we need to handle both.
+            var parent = node.parentNode,
+                styles = {
+                    node: DomElement.getStyles(node) || {},
+                    // Do not check for inheritance if this is root, to make the
+                    // default SVG settings stick. Also detect defs parents, of
+                    // which children need to explicitly inherit their styles.
+                    parent: !isRoot && !/^defs$/i.test(parent.tagName)
+                            && DomElement.getStyles(parent) || {}
+                };
+            Base.each(attributes, function(apply, name) {
+                var value = getAttribute(node, name, styles);
+                // 'clip-path' attribute returns a new item, support it here:
+                item = value !== undefined
+                        && apply(item, value, name, node, styles) || item;
+            });
+        }
         return item;
     }
 
-    var definitions = {};
     function getDefinition(value) {
         // When url() comes from a style property, '#'' seems to be missing on
         // WebKit. We also get variations of quotes or no quotes, single or
         // double, so handle it all with one regular expression:
         var match = value && value.match(/\((?:["'#]*)([^"')]+)/),
-            res = match && definitions[match[1]
-                // This is required by Firefox, which can produce absolute urls
-                // for local gradients, see #1001:
-                .replace(window.location.href.split('#')[0] + '#', '')];
+            name = match && match[1],
+            res = name && definitions[window
+                    // This is required by Firefox, which can produce absolute
+                    // urls for local gradients, see #1001:
+                    ? name.replace(window.location.href.split('#')[0] + '#', '')
+                    : name];
         // Patch in support for SVG's gradientUnits="objectBoundingBox" through
         // Color#_scaleToBounds
         if (res && res._scaleToBounds) {
@@ -576,9 +572,10 @@ new function() {
             parent,
             next;
         if (isRoot && isElement) {
-            // Set rootSize root element size, fall-back to view size.
-            rootSize = getSize(node, null, null, true)
-                    || paper.getView().getSize();
+            // Set rootSize to view size, as getSize() may refer to it (#1242).
+            rootSize = paper.getView().getSize();
+            // Now set rootSize to the root element size, and fall-back to view.
+            rootSize = getSize(node, null, null, true) || rootSize;
             // We need to move the SVG node to the current document, so default
             // styles are correctly inherited! For this we create and insert a
             // temporary SVG container which is removed again at the end. This
@@ -659,7 +656,7 @@ new function() {
 
         function onLoad(svg) {
             try {
-                var node = typeof svg === 'object' ? svg : new window.DOMParser()
+                var node = typeof svg === 'object' ? svg : new self.DOMParser()
                         .parseFromString(svg, 'image/svg+xml');
                 if (!node.nodeName) {
                     node = null;

@@ -45,7 +45,7 @@ var Key = new function() {
         keyMap = {}, // Map for currently pressed keys
         charMap = {}, // key -> char mappings for pressed keys
         metaFixMap, // Keys that will not receive keyup events due to Mac bug
-        downKey; // The key from the keydown event, if it wasn't handled already
+        downKey, // The key from the keydown event, if it wasn't handled already
 
         // Use new Base() to convert into a Base object, for #toString()
         modifiers = new Base({
@@ -81,8 +81,9 @@ var Key = new function() {
                 // Use short version for arrow keys: ArrowLeft -> Left
                 : /^Arrow[A-Z]/.test(key) ? key.substr(5)
                 // This is far from ideal, but what else can we do?
-                : key === 'Unidentified' ? String.fromCharCode(event.keyCode)
-                : key;
+                : key === 'Unidentified'  || key === undefined
+                    ? String.fromCharCode(event.keyCode)
+                    : key;
         return keyLookup[key] ||
                 // Hyphenate camel-cased special keys, lower-case normal ones:
                 (key.length > 1 ? Base.hyphenate(key) : key.toLowerCase());

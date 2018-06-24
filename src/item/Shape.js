@@ -28,8 +28,8 @@ var Shape = Item.extend(/** @lends Shape# */{
         radius: null
     },
 
-    initialize: function Shape(props) {
-        this._initialize(props);
+    initialize: function Shape(props, point) {
+        this._initialize(props, point);
     },
 
     _equals: function(item) {
@@ -63,7 +63,7 @@ var Shape = Item.extend(/** @lends Shape# */{
     /**
      * @private
      * @bean
-     * @deprecated use {@link #getType()} instead.
+     * @deprecated use {@link #type} instead.
      */
     getShape: '#getType',
     setShape: '#setType',
@@ -90,8 +90,7 @@ var Shape = Item.extend(/** @lends Shape# */{
                 height = size.height;
             if (type === 'rectangle') {
                 // Shrink radius accordingly
-                var radius = Size.min(this._radius, size.divide(2));
-                this._radius.set(radius.width, radius.height);
+                this._radius.set(Size.min(this._radius, size.divide(2)));
             } else if (type === 'circle') {
                 // Use average of width and height as new size, then calculate
                 // radius as a number from that:
@@ -99,9 +98,9 @@ var Shape = Item.extend(/** @lends Shape# */{
                 this._radius = width / 2;
             } else if (type === 'ellipse') {
                 // The radius is a size.
-                this._radius.set(width / 2, height / 2);
+                this._radius._set(width / 2, height / 2);
             }
-            this._size.set(width, height);
+            this._size._set(width, height);
             this._changed(/*#=*/Change.GEOMETRY);
         }
     },
@@ -127,7 +126,7 @@ var Shape = Item.extend(/** @lends Shape# */{
                 return;
             var size = radius * 2;
             this._radius = radius;
-            this._size.set(size, size);
+            this._size._set(size, size);
         } else {
             radius = Size.read(arguments);
             if (!this._radius) {
@@ -136,13 +135,13 @@ var Shape = Item.extend(/** @lends Shape# */{
             } else {
                 if (this._radius.equals(radius))
                     return;
-                this._radius.set(radius.width, radius.height);
+                this._radius.set(radius);
                 if (type === 'rectangle') {
                     // Grow size accordingly
                     var size = Size.max(this._size, radius.multiply(2));
-                    this._size.set(size.width, size.height);
+                    this._size.set(size);
                 } else if (type === 'ellipse') {
-                    this._size.set(radius.width * 2, radius.height * 2);
+                    this._size._set(radius.width * 2, radius.height * 2);
                 }
             }
         }
@@ -163,7 +162,7 @@ var Shape = Item.extend(/** @lends Shape# */{
      * @param {Boolean} [insert=true] specifies whether the new path should be
      *     inserted into the scene graph. When set to `true`, it is inserted
      *     above the shape item
-     * @return {Shape} the newly created path item with the same geometry as
+     * @return {Path} the newly created path item with the same geometry as
      *     this shape item
      * @see Path#toShape(insert)
      */
@@ -187,6 +186,10 @@ var Shape = Item.extend(/** @lends Shape# */{
     },
 
     toShape: '#clone',
+
+    _asPathItem: function() {
+        return this.toPath(false);
+    },
 
     _draw: function(ctx, param, viewMatrix, strokeMatrix) {
         var style = this._style,
@@ -296,15 +299,18 @@ new function() { // Scope for _contains() and _hitTestSelf() code.
         var radius = that._radius;
         if (!radius.isZero()) {
             var halfSize = that._size.divide(2);
-            for (var i = 0; i < 4; i++) {
+            for (var q = 1; q <= 4; q++) {
                 // Calculate the bounding boxes of the four quarter ellipses
                 // that define the rounded rectangle, and hit-test these.
-                var dir = new Point(i & 1 ? 1 : -1, i > 1 ? 1 : -1),
+                // Setup `dir` to be in quadrant `q` (See Point#isInQuadrant()):
+                var dir = new Point(q > 1 && q < 4 ? -1 : 1, q > 2 ? -1 : 1),
                     corner = dir.multiply(halfSize),
                     center = corner.subtract(dir.multiply(radius)),
-                    rect = new Rectangle(corner, center);
-                if ((expand ? rect.expand(expand) : rect).contains(point))
-                    return center;
+                    rect = new Rectangle(
+                            expand ? corner.add(dir.multiply(expand)) : corner,
+                            center);
+                if (rect.contains(point))
+                    return { point: center, quadrant: q };
             }
         }
     }
@@ -320,7 +326,7 @@ new function() { // Scope for _contains() and _hitTestSelf() code.
         var vector = point.divide(radius);
         // We also have to check the vector's quadrant in case we're matching
         // quarter ellipses in the corners.
-        return (!quadrant || vector.quadrant === quadrant) &&
+        return (!quadrant || vector.isInQuadrant(quadrant)) &&
                 vector.subtract(vector.normalize()).multiply(radius)
                     .divide(padding).length <= 1;
     }
@@ -332,7 +338,7 @@ new function() { // Scope for _contains() and _hitTestSelf() code.
                 return center
                         // If there's a quarter ellipse center, use the same
                         // check as for ellipses below.
-                        ? point.subtract(center).divide(this._radius)
+                        ? point.subtract(center.point).divide(this._radius)
                             .getLength() <= 1
                         : _contains.base.call(this, point);
             } else {
@@ -360,8 +366,8 @@ new function() { // Scope for _contains() and _hitTestSelf() code.
                         center = getCornerCenter(this, point, padding);
                     if (center) {
                         // Check the stroke of the quarter corner ellipse:
-                        hit = isOnEllipseStroke(point.subtract(center), radius,
-                                strokePadding, center.getQuadrant());
+                        hit = isOnEllipseStroke(point.subtract(center.point),
+                                radius, strokePadding, center.quadrant);
                     } else {
                         var rect = new Rectangle(this._size).setCenter(0, 0),
                             outer = rect.expand(padding),
@@ -384,11 +390,11 @@ new function() { // Scope for _contains() and _hitTestSelf() code.
 // Mess with indentation in order to get more line-space below:
 statics: new function() {
     function createShape(type, point, size, radius, args) {
-        var item = new Shape(Base.getNamed(args));
+        var item = new Shape(Base.getNamed(args), point);
         item._type = type;
         item._size = size;
         item._radius = radius;
-        return item.translate(point);
+        return item;
     }
 
     return /** @lends Shape */{
@@ -409,8 +415,8 @@ statics: new function() {
          * object literal.
          *
          * @name Shape.Circle
-         * @param {Object} object an object literal containing properties
-         * describing the shape's attributes
+         * @param {Object} object an object containing properties describing the
+         *     shape's attributes
          * @return {Shape} the newly created shape
          *
          * @example {@paperscript}
@@ -482,8 +488,8 @@ statics: new function() {
          * object literal.
          *
          * @name Shape.Rectangle
-         * @param {Object} object an object literal containing properties
-         * describing the shape's attributes
+         * @param {Object} object an object containing properties describing the
+         *     shape's attributes
          * @return {Shape} the newly created shape
          *
          * @example {@paperscript}
@@ -542,8 +548,8 @@ statics: new function() {
          * object literal.
          *
          * @name Shape.Ellipse
-         * @param {Object} object an object literal containing properties
-         * describing the shape's attributes
+         * @param {Object} object an object containing properties describing the
+         *     shape's attributes
          * @return {Shape} the newly created shape
          *
          * @example {@paperscript}

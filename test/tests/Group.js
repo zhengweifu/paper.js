@@ -49,6 +49,9 @@ test('new Group({children:[item]})', function() {
         return paper.project.activeLayer.children.length;
     }, 1);
     equals(function() {
+        return path.parent == group;
+    }, true);
+    equals(function() {
         return group.children[0] == path;
     }, true);
 });
@@ -108,3 +111,27 @@ test('group.insertChildren(0, otherGroup.children)', function() {
         return group.children.length;
     }, 0);
 });
+
+test('group.addChildren()', function() {
+    var group = new Group();
+    var path1 = new Path();
+    var path2 = new Path();
+    var children = [path1, path2];
+    group.addChildren(children);
+    equals(group.children.length, 2,
+            'group.children.length after adding 2 children');
+    group.removeChildren();
+    equals(group.children.length, 0,
+            'group.children.length after removing all children');
+    children.splice(1, 0, null);
+    equals(children.length, 3,
+            'children array length after inserting null at index 1');
+    group.addChildren(children);
+    equals(group.children.length, 2,
+            'calling group.addChildren() with an array with 3 entries, ' +
+            'of which 2 are valid, group.children.length should be 2');
+    children = [path1, path1, path2];
+    group.addChildren(children);
+    equals(group.children.length, 2,
+            'adding the same item twice should only add it once.');
+})

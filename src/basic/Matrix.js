@@ -18,9 +18,9 @@
 /**
  * @name Matrix
  *
- * @class An affine transform performs a linear mapping from 2D coordinates
- * to other 2D coordinates that preserves the "straightness" and
- * "parallelness" of lines.
+ * @class An affine transformation matrix performs a linear mapping from 2D
+ *     coordinates to other 2D coordinates that preserves the "straightness" and
+ *     "parallelness" of lines.
  *
  * Such a coordinate transformation can be represented by a 3 row by 3
  * column matrix with an implied last row of `[ 0 0 1 ]`. This matrix
@@ -42,29 +42,52 @@ var Matrix = Base.extend(/** @lends Matrix# */{
     _class: 'Matrix',
 
     /**
-     * Creates a 2D affine transform.
+     * Creates a 2D affine transformation matrix that describes the identity
+     * transformation.
      *
+     * @name Matrix#initialize
+     */
+    /**
+     * Creates a 2D affine transformation matrix.
+     *
+     * @name Matrix#initialize
      * @param {Number} a the a property of the transform
-     * @param {Number} c the c property of the transform
      * @param {Number} b the b property of the transform
+     * @param {Number} c the c property of the transform
      * @param {Number} d the d property of the transform
      * @param {Number} tx the tx property of the transform
      * @param {Number} ty the ty property of the transform
      */
-    initialize: function Matrix(arg) {
+    /**
+     * Creates a 2D affine transformation matrix.
+     *
+     * @name Matrix#initialize
+     * @param {Number[]} values the matrix values to initialize this matrix with
+     */
+    /**
+     * Creates a 2D affine transformation matrix.
+     *
+     * @name Matrix#initialize
+     * @param {Matrix} matrix the matrix to copy the values from
+     */
+    initialize: function Matrix(arg, _dontNotify) {
         var count = arguments.length,
             ok = true;
-        if (count === 6) {
-            this.set.apply(this, arguments);
-        } else if (count === 1) {
+        if (count >= 6) { // >= 6 to pass on optional _dontNotify argument.
+            this._set.apply(this, arguments);
+        } else if (count === 1 || count === 2) {
+            // Support both Matrix and Array arguments through #_set(), and pass
+            // on the optional _dontNotify argument:
             if (arg instanceof Matrix) {
-                this.set(arg._a, arg._b, arg._c, arg._d, arg._tx, arg._ty);
+                this._set(arg._a, arg._b, arg._c, arg._d, arg._tx, arg._ty,
+                        _dontNotify);
             } else if (Array.isArray(arg)) {
-                this.set.apply(this, arg);
+                this._set.apply(this,
+                        _dontNotify ? arg.concat([_dontNotify]) : arg);
             } else {
                 ok = false;
             }
-        } else if (count === 0) {
+        } else if (!count) {
             this.reset();
         } else {
             ok = false;
@@ -72,20 +95,20 @@ var Matrix = Base.extend(/** @lends Matrix# */{
         if (!ok) {
             throw new Error('Unsupported matrix parameters');
         }
+        return this;
     },
 
     /**
-     * Sets this transform to the matrix specified by the 6 values.
+     * Sets the matrix to the passed values. Note that any sequence of
+     * parameters that is supported by the various {@link Matrix()} constructors
+     * also work for calls of `set()`.
      *
-     * @param {Number} a the a property of the transform
-     * @param {Number} b the b property of the transform
-     * @param {Number} c the c property of the transform
-     * @param {Number} d the d property of the transform
-     * @param {Number} tx the tx property of the transform
-     * @param {Number} ty the ty property of the transform
-     * @return {Matrix} this affine transform
+     * @function
      */
-    set: function(a, b, c, d, tx, ty, _dontNotify) {
+    set: '#initialize',
+
+    // See Point#_set() for an explanation of #_set():
+    _set: function(a, b, c, d, tx, ty, _dontNotify) {
         this._a = a;
         this._b = b;
         this._c = c;
@@ -176,7 +199,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
     },
 
     /**
-     * Concatenates this transform with a translate transformation.
+     * Concatenates this matrix with a translate transformation.
      *
      * @name Matrix#translate
      * @function
@@ -184,7 +207,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
      * @return {Matrix} this affine transform
      */
     /**
-     * Concatenates this transform with a translate transformation.
+     * Concatenates this matrix with a translate transformation.
      *
      * @name Matrix#translate
      * @function
@@ -203,7 +226,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
     },
 
     /**
-     * Concatenates this transform with a scaling transformation.
+     * Concatenates this matrix with a scaling transformation.
      *
      * @name Matrix#scale
      * @function
@@ -212,7 +235,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
      * @return {Matrix} this affine transform
      */
     /**
-     * Concatenates this transform with a scaling transformation.
+     * Concatenates this matrix with a scaling transformation.
      *
      * @name Matrix#scale
      * @function
@@ -237,7 +260,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
     },
 
     /**
-     * Concatenates this transform with a rotation transformation around an
+     * Concatenates this matrix with a rotation transformation around an
      * anchor point.
      *
      * @name Matrix#rotate
@@ -247,7 +270,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
      * @return {Matrix} this affine transform
      */
     /**
-     * Concatenates this transform with a rotation transformation around an
+     * Concatenates this matrix with a rotation transformation around an
      * anchor point.
      *
      * @name Matrix#rotate
@@ -282,7 +305,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
     },
 
     /**
-     * Concatenates this transform with a shear transformation.
+     * Concatenates this matrix with a shear transformation.
      *
      * @name Matrix#shear
      * @function
@@ -291,7 +314,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
      * @return {Matrix} this affine transform
      */
     /**
-     * Concatenates this transform with a shear transformation.
+     * Concatenates this matrix with a shear transformation.
      *
      * @name Matrix#shear
      * @function
@@ -320,7 +343,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
     },
 
     /**
-     * Concatenates this transform with a skew transformation.
+     * Concatenates this matrix with a skew transformation.
      *
      * @name Matrix#skew
      * @function
@@ -329,7 +352,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
      * @return {Matrix} this affine transform
      */
     /**
-     * Concatenates this transform with a skew transformation.
+     * Concatenates this matrix with a skew transformation.
      *
      * @name Matrix#skew
      * @function
@@ -354,24 +377,60 @@ var Matrix = Base.extend(/** @lends Matrix# */{
      * @param {Matrix} matrix the matrix to append
      * @return {Matrix} this matrix, modified
      */
-    append: function(mx) {
-        var a1 = this._a,
-            b1 = this._b,
-            c1 = this._c,
-            d1 = this._d,
-            a2 = mx._a,
-            b2 = mx._c,
-            c2 = mx._b,
-            d2 = mx._d,
-            tx2 = mx._tx,
-            ty2 = mx._ty;
-        this._a = a2 * a1 + c2 * c1;
-        this._c = b2 * a1 + d2 * c1;
-        this._b = a2 * b1 + c2 * d1;
-        this._d = b2 * b1 + d2 * d1;
-        this._tx += tx2 * a1 + ty2 * c1;
-        this._ty += tx2 * b1 + ty2 * d1;
-        this._changed();
+    append: function(mx, _dontNotify) {
+        if (mx) {
+            var a1 = this._a,
+                b1 = this._b,
+                c1 = this._c,
+                d1 = this._d,
+                a2 = mx._a,
+                b2 = mx._c,
+                c2 = mx._b,
+                d2 = mx._d,
+                tx2 = mx._tx,
+                ty2 = mx._ty;
+            this._a = a2 * a1 + c2 * c1;
+            this._c = b2 * a1 + d2 * c1;
+            this._b = a2 * b1 + c2 * d1;
+            this._d = b2 * b1 + d2 * d1;
+            this._tx += tx2 * a1 + ty2 * c1;
+            this._ty += tx2 * b1 + ty2 * d1;
+            if (!_dontNotify)
+                this._changed();
+        }
+        return this;
+    },
+
+    /**
+     * Prepends the specified matrix to this matrix. This is the equivalent of
+     * multiplying `(specified matrix) * (this matrix)`.
+     *
+     * @param {Matrix} matrix the matrix to prepend
+     * @return {Matrix} this matrix, modified
+     */
+    prepend: function(mx, _dontNotify) {
+        if (mx) {
+            var a1 = this._a,
+                b1 = this._b,
+                c1 = this._c,
+                d1 = this._d,
+                tx1 = this._tx,
+                ty1 = this._ty,
+                a2 = mx._a,
+                b2 = mx._c,
+                c2 = mx._b,
+                d2 = mx._d,
+                tx2 = mx._tx,
+                ty2 = mx._ty;
+            this._a = a2 * a1 + b2 * b1;
+            this._c = a2 * c1 + b2 * d1;
+            this._b = c2 * a1 + d2 * b1;
+            this._d = c2 * c1 + d2 * d1;
+            this._tx = a2 * tx1 + b2 * ty1 + tx2;
+            this._ty = c2 * tx1 + d2 * ty1 + ty2;
+            if (!_dontNotify)
+                this._changed();
+        }
         return this;
     },
 
@@ -385,36 +444,6 @@ var Matrix = Base.extend(/** @lends Matrix# */{
      */
     appended: function(mx) {
         return this.clone().append(mx);
-    },
-
-    /**
-     * Prepends the specified matrix to this matrix. This is the equivalent of
-     * multiplying `(specified matrix) * (this matrix)`.
-     *
-     * @param {Matrix} matrix the matrix to prepend
-     * @return {Matrix} this matrix, modified
-     */
-    prepend: function(mx) {
-        var a1 = this._a,
-            b1 = this._b,
-            c1 = this._c,
-            d1 = this._d,
-            tx1 = this._tx,
-            ty1 = this._ty,
-            a2 = mx._a,
-            b2 = mx._c,
-            c2 = mx._b,
-            d2 = mx._d,
-            tx2 = mx._tx,
-            ty2 = mx._ty;
-        this._a = a2 * a1 + b2 * b1;
-        this._c = a2 * c1 + b2 * d1;
-        this._b = c2 * a1 + d2 * b1;
-        this._d = c2 * c1 + d2 * d1;
-        this._tx = a2 * tx1 + b2 * ty1 + tx2;
-        this._ty = c2 * tx1 + d2 * ty1 + ty2;
-        this._changed();
-        return this;
     },
 
     /**
@@ -469,15 +498,15 @@ var Matrix = Base.extend(/** @lends Matrix# */{
     },
 
     /**
-     * @deprecated, use use {@link #append(matrix)} instead.
+     * @deprecated use use {@link #append(matrix)} instead.
      */
     concatenate: '#append',
     /**
-     * @deprecated, use use {@link #prepend(matrix)} instead.
+     * @deprecated use use {@link #prepend(matrix)} instead.
      */
     preConcatenate: '#prepend',
     /**
-     * @deprecated, use use {@link #appended(matrix)} instead.
+     * @deprecated use use {@link #appended(matrix)} instead.
      */
     chain: '#appended',
 
@@ -497,7 +526,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
     },
 
     /**
-     * @return {Boolean} whether this transform is the identity transform
+     * @return {Boolean} whether this matrix is the identity matrix
      */
     isIdentity: function() {
         return this._a === 1 && this._b === 0 && this._c === 0 && this._d === 1
@@ -505,10 +534,10 @@ var Matrix = Base.extend(/** @lends Matrix# */{
     },
 
     /**
-     * Returns whether the transform is invertible. A transform is not
-     * invertible if the determinant is 0 or any value is non-finite or NaN.
+     * Checks whether the matrix is invertible. A matrix is not invertible if
+     * the determinant is 0 or any value is infinite or NaN.
      *
-     * @return {Boolean} whether the transform is invertible
+     * @return {Boolean} whether the matrix is invertible
      */
     isInvertible: function() {
         var det = this._a * this._d - this._c * this._b;
@@ -562,7 +591,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
             y = point.y;
         if (!dest)
             dest = new Point();
-        return dest.set(
+        return dest._set(
                 x * this._a + y * this._c + this._tx,
                 x * this._b + y * this._d + this._ty,
                 _dontNotify);
@@ -607,7 +636,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
         }
         if (!dest)
             dest = new Rectangle();
-        return dest.set(min[0], min[1], max[0] - min[0], max[1] - min[1],
+        return dest._set(min[0], min[1], max[0] - min[0], max[1] - min[1],
                 _dontNotify);
     },
 
@@ -634,7 +663,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
                 y = point.y - this._ty;
             if (!dest)
                 dest = new Point();
-            res = dest.set(
+            res = dest._set(
                     (x * d - y * c) / det,
                     (y * a - x * b) / det,
                     _dontNotify);
@@ -644,7 +673,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
 
     /**
      * Attempts to decompose the affine transformation described by this matrix
-     * into `scaling`, `rotation` and `shearing`, and returns an object with
+     * into `scaling`, `rotation` and `skewing`, and returns an object with
      * these properties if it succeeded, `null` otherwise.
      *
      * @return {Object} the decomposed matrix, or `null` if decomposition is not
@@ -737,7 +766,7 @@ var Matrix = Base.extend(/** @lends Matrix# */{
      */
 
     /**
-     * The transform values as an array, in the same sequence as they are passed
+     * The matrix values as an array, in the same sequence as they are passed
      * to {@link #initialize(a, b, c, d, tx, ty)}.
      *
      * @bean

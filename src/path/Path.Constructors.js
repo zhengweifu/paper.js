@@ -22,13 +22,13 @@ Path.inject({ statics: new function() {
 
     function createPath(segments, closed, args) {
         var props = Base.getNamed(args),
-            path = new Path(props && props.insert === false && Item.NO_INSERT);
+            path = new Path(props && props.insert == false && Item.NO_INSERT);
         path._add(segments);
         // No need to use setter for _closed since _add() called _changed().
         path._closed = closed;
         // Set named arguments at the end, since some depend on geometry to be
         // defined (e.g. #clockwise)
-        return path.set(props);
+        return path.set(props, { insert: true });
     }
 
     function createEllipse(center, radius, args) {
@@ -67,8 +67,8 @@ Path.inject({ statics: new function() {
          * literal.
          *
          * @name Path.Line
-         * @param {Object} object an object literal containing properties
-         * describing the path's attributes
+         * @param {Object} object an object containing properties describing the
+         *     path's attributes
          * @return {Path} the newly created path
          *
          * @example {@paperscript}
@@ -102,8 +102,8 @@ Path.inject({ statics: new function() {
          * object literal.
          *
          * @name Path.Circle
-         * @param {Object} object an object literal containing properties
-         * describing the path's attributes
+         * @param {Object} object an object containing properties describing the
+         *     path's attributes
          * @return {Path} the newly created path
          *
          * @example {@paperscript}
@@ -174,8 +174,8 @@ Path.inject({ statics: new function() {
          * object literal.
          *
          * @name Path.Rectangle
-         * @param {Object} object an object literal containing properties
-         * describing the path's attributes
+         * @param {Object} object an object containing properties describing the
+         *     path's attributes
          * @return {Path} the newly created path
          *
          * @example {@paperscript}
@@ -267,8 +267,8 @@ Path.inject({ statics: new function() {
          * object literal.
          *
          * @name Path.Ellipse
-         * @param {Object} object an object literal containing properties
-         * describing the path's attributes
+         * @param {Object} object an object containing properties describing the
+         *     path's attributes
          * @return {Path} the newly created path
          *
          * @example {@paperscript}
@@ -317,8 +317,8 @@ Path.inject({ statics: new function() {
          * object literal.
          *
          * @name Path.Arc
-         * @param {Object} object an object literal containing properties
-         * describing the path's attributes
+         * @param {Object} object an object containing properties describing the
+         *     path's attributes
          * @return {Path} the newly created path
          *
          * @example {@paperscript}
@@ -335,7 +335,7 @@ Path.inject({ statics: new function() {
                 to = Point.readNamed(arguments, 'to'),
                 props = Base.getNamed(arguments),
                 // See createPath() for an explanation of the following sequence
-                path = new Path(props && props.insert === false
+                path = new Path(props && props.insert == false
                         && Item.NO_INSERT);
             path.moveTo(from);
             path.arcTo(through, to);
@@ -363,8 +363,8 @@ Path.inject({ statics: new function() {
          * described by an object literal.
          *
          * @name Path.RegularPolygon
-         * @param {Object} object an object literal containing properties
-         * describing the path's attributes
+         * @param {Object} object an object containing properties describing the
+         *     path's attributes
          * @return {Path} the newly created path
          *
          * @example {@paperscript}
@@ -417,8 +417,8 @@ Path.inject({ statics: new function() {
          * object literal.
          *
          * @name Path.Star
-         * @param {Object} object an object literal containing properties
-         * describing the path's attributes
+         * @param {Object} object an object containing properties describing the
+         *     path's attributes
          * @return {Path} the newly created path
          *
          * @example {@paperscript}
